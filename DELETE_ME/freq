@@ -1,0 +1,16 @@
+#!/bin/bash
+
+N=50
+GOOD=0
+BAD=0
+
+while ((N > 0)); do
+  N=$((N-1))
+  if ./script; then
+    GOOD=$((GOOD + 1))
+  else
+    BAD=$((BAD + 1))
+  fi
+done
+
+printf "failed %d/%d runs\n" ${BAD} $((GOOD + BAD))

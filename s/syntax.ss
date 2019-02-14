@@ -4693,6 +4693,10 @@
 
   (define library-search
     (lambda (who path dir* all-ext*)
+      ((library-search-handler) who path dir* all-ext*)))
+
+  (define default-library-search
+    (lambda (who path dir* all-ext*)
       (define-syntax with-message
         (syntax-rules ()
           [(_ msg e1 e2 ...)
@@ -4995,6 +4999,10 @@
   (set! $library-search
     (lambda (who path dir* all-ext*)
       (library-search who path dir* all-ext*)))
+
+  (set-who! library-search-handler
+    ($make-thread-parameter default-library-search
+      (lambda (x) (unless (procedure? x) ($oops who "~s is not a procedure" x)) x)))
 
   (set! library-list
     (lambda ()

@@ -1137,3 +1137,13 @@
   generated config.h.  Instead removed InstallPrefix entirely so
   it isn't an attractive hazzard.
     configure, makefiles/Mf-install.in
+- added tentative fix for whole program/library compilation bug reported
+  by @owaddell in issue 386.  the fix modifies invoke requirements in
+  the libraries included in the whole program/library compilation so
+  that external invoke requirements are handled for libraries that
+  come earlier in the combined invoke code.
+    compile.ss
+- included @owaddell's test case and modification to allow a user specified
+  library search in order to use the test code provided.
+    syntax.ss,
+    DELETE_ME/* (new)

@@ -1,0 +1,8 @@
+(library (lib2 five)
+  (export five:get-next)
+  (import (scheme))
+  (define ___ (printf "evaluating five.ss\n"))
+  (define next 0)
+  (define (five:get-next)
+    (set! next (+ next 1))
+    next))

@@ -1297,20 +1297,44 @@
           body
           rcinfo*)))
 
+
+    (define (add-req* ht ls req*)
+      (fold-right (lambda (req ls)
+                    (let* ([uid (libreq-uid req)]
+                           [cell (symbol-hashtable-cell ht (libreq-uid req) #f)])
+                      (cond
+                        [(cdr cell) ls]
+                        [else (set-cdr! cell #t) (cons req ls)])))
+        ls req*))
+    (define (remove-req ls uid) (remp (lambda (req) (eq? (libreq-uid req) uid)) ls))
+    (define add-library/rt-records
+      (lambda (node* body)
+        ;; ht maintains our list of collected requirements, marking libraries
+        ;; we've laid down in the invoke reqs before it as already invoked.
+        ;; Thus, ht maps a library uid to a libreq (meaning it was collected)
+        ;; or #f (meaning it was already passed).
+        (let ([ht (make-hashtable symbol-hash eq?)])
+          (let loop ([node* node*] [collected-req* '()] [body body])
+            (if (null? node*)
+                body
+                (let ([node (car node*)])
+                  (if (library-node-binary? node)
+                      (loop (cdr node*) collected-req* body)
+                      (let* ([info (library-node-rtinfo node)]
+                             [req* (library/rt-info-invoke-req* info)]
+                             [collected-req* (add-req* ht collected-req* req*)])
+                          (loop (cdr node*)
+                            (remove-req collected-req* (library-node-uid node))
+                            `(group (revisit-only
+                                      ,(make-library/rt-info
+                                         (library-info-path info)
+                                         (library-info-version info)
+                                         (library-info-uid info)
+                                         collected-req*))
+                               ,body))))))))))
     (define add-library-records
       (lambda (node* visit-lib* body)
-        (fold-left
-          (lambda (body node)
-            (if (library-node-binary? node)
-                body
-                `(group (revisit-only
-                          ,(let ([info (library-node-rtinfo node)])
-                             (make-library/rt-info
-                               (library-info-path info)
-                               (library-info-version info)
-                               (library-info-uid info)
-                               (library/rt-info-invoke-req* info))))
-                   ,body)))
+        (add-library/rt-records node*
           (fold-left
             (lambda (body visit-lib)
               (if (library-node-binary? visit-lib)
@@ -1329,8 +1353,7 @@
                                      (library/ct-info-clo* info)
                                      '()))))
                      ,body)))
-            body visit-lib*)
-          node*)))
+            body visit-lib*))))
 
     (define add-visit-lib-install*
       (lambda (visit-lib* body)
