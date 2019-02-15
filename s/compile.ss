@@ -1307,6 +1307,7 @@
                         [else (set-cdr! cell #t) (cons req ls)])))
         ls req*))
     (define (remove-req ls uid) (remp (lambda (req) (eq? (libreq-uid req) uid)) ls))
+    ;; NB: should include clustering information, so that clusters all share the same set of invoke requirements
     (define add-library/rt-records
       (lambda (node* body)
         ;; ht maintains our list of collected requirements, marking libraries
@@ -1367,7 +1368,7 @@
       (lambda (program-entry node* visit-lib* invisible* rcinfo*)
         (add-recompile-info rcinfo*
           (add-library-records node* visit-lib*
-            (add-library-records node* invisible*
+            (add-library-records '() invisible*
               (add-visit-lib-install* visit-lib*
                 (add-visit-lib-install* invisible*
                   `(revisit-only ,(build-combined-program-ir program-entry node*)))))))))

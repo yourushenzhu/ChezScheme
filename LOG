@@ -1147,3 +1147,5 @@
   library search in order to use the test code provided.
     syntax.ss,
     DELETE_ME/* (new)
+- incorporate @owaddell's fix to avoid duplicating node*.
+    compile.ss
