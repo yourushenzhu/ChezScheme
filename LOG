@@ -1149,3 +1149,12 @@
     DELETE_ME/* (new)
 - incorporate @owaddell's fix to avoid duplicating node*.
     compile.ss
+- improved fix for whole program/library compilation.  in
+  compile-whole-program, where libraries are clustered and invoke
+  requirements exist only in the library-rt/info records, the invoke
+  requirements for all libraries in a cluster are collected and the
+  library/rt-info record for each library has the collected set of
+  invoke requirements.  In compile-whole-program, where binary invoke
+  requirements are explicitly invoked in the code, the library-rt/info
+  records are left alone.
+    compile.ss

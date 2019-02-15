@@ -1,6 +1,6 @@
 #!/bin/bash
 
-N=50
+N=500
 GOOD=0
 BAD=0
 
