@@ -1284,73 +1284,84 @@
           body
           rcinfo*)))
 
-    (define (compute-collected-req* node*)
-      (let ([ht (make-hashtable symbol-hash eq?)])
-        ;; remove the constituents of the cluster, since they will be invoked
-        ;; as part of the collected code, and have already been appropriately
-        ;; sorted.
-        (for-each (lambda (node) (symbol-hashtable-set! ht (library-node-uid node) #t)) node*)
-        (fold-right
-          (lambda (node collected-req*)
-            (fold-right
-              (lambda (req collected-req*)
-                (let ([cell (symbol-hashtable-cell ht (libreq-uid req) #f)])
-                  (if (cdr cell)
-                      collected-req*
-                      (begin
-                        (set-cdr! cell #t)
-                        (cons req collected-req*)))))
-              collected-req* (library-node-invoke-req* node)))
-          '() node*)))
+    (define compute-collected-req*
+      (lambda (node*)
+        (let ([ht (make-hashtable symbol-hash eq?)])
+          ;; remove the constituents of the cluster, since they will be invoked
+          ;; as part of the collected code, and have already been appropriately
+          ;; sorted.
+          (for-each (lambda (node) (symbol-hashtable-set! ht (library-node-uid node) #t)) node*)
+          (fold-right
+            (lambda (node collected-req*)
+              (fold-right
+                (lambda (req collected-req*)
+                  (let ([cell (symbol-hashtable-cell ht (libreq-uid req) #f)])
+                    (if (cdr cell)
+                        collected-req*
+                        (begin
+                          (set-cdr! cell #t)
+                          (cons req collected-req*)))))
+                collected-req* (library-node-invoke-req* node)))
+            '() node*))))
 
-    (define add-library/rt-cluster-records
-      (lambda (cluster* body)
-        (let loop ([cluster* cluster*] [body body])
-          (if (null? cluster*)
-              body
-              (loop (cdr cluster*)
-                (let* ([cluster (car cluster*)]
-                       [collected-req* (compute-collected-req* cluster)])
-                  (fold-left (lambda (body node)
-                               (let ([info (library-node-rtinfo node)])
-                                 `(group (revisit-only
-                                           ,(make-library/rt-info
-                                              (library-info-path info)
-                                              (library-info-version info)
-                                              (library-info-uid info)
-                                              collected-req*))
-                                    ,body)))
-                    body cluster)))))))
+    (define requirements-join
+      (lambda (import-req* maybe-collected-invoke-req*)
+        (if maybe-collected-invoke-req*
+            (let f ([invoke-req* maybe-collected-invoke-req*])
+              (if (null? invoke-req*)
+                  import-req*
+                  (let* ([req (car invoke-req*)] [uid (libreq-uid req)])
+                    (if (memp (lambda (import-req) (eq? (libreq-uid import-req) uid)) import-req*)
+                        (f (cdr invoke-req*))
+                        (cons req (f (cdr invoke-req*)))))))
+            import-req*)))
+
+    (define build-collected-req-ht
+      (lambda (cluster*)
+        (let ([ht (make-hashtable symbol-hash eq?)])
+          (for-each (lambda (cluster)
+                      (let ([collected-req* (compute-collected-req* cluster)])
+                        (for-each
+                          (lambda (node)
+                            (symbol-hashtable-set! ht (library-node-uid node) collected-req*))
+                          cluster)))
+            cluster*)
+          ht)))
 
     (define add-library/rt-records
-      (lambda (node* body)
+      (lambda (maybe-ht node* body)
         (fold-left (lambda (body node)
                      (if (library-node-binary? node)
                          body
-                         (let ([info (library-node-rtinfo node)])
+                         (let* ([info (library-node-rtinfo node)]
+                                [uid (library-info-uid info)])
                            `(group (revisit-only
                                      ,(make-library/rt-info
                                         (library-info-path info)
                                         (library-info-version info)
-                                        (library-info-uid info)
-                                        (library/rt-info-invoke-req* info)))
+                                        uid
+                                        (or (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))
+                                            (library/rt-info-invoke-req* info))))
                               ,body))))
           body node*)))
 
     (define add-library/ct-records
-      (lambda (visit-lib* body)
+      (lambda (maybe-ht visit-lib* body)
         (fold-left
           (lambda (body visit-lib)
             (if (library-node-binary? visit-lib)
                 body
                 `(group (visit-only
-                          ,(let ([info (library-node-ctinfo visit-lib)])
+                          ,(let* ([info (library-node-ctinfo visit-lib)]
+                                  [uid (library-info-uid info)])
                              (make-library/ct-info
                                (library-info-path info)
                                (library-info-version info)
-                               (library-info-uid info)
+                               uid
                                (library/ct-info-include-req* info)
-                               (library/ct-info-import-req* info)
+                               (requirements-join
+                                 (library/ct-info-import-req* info)
+                                 (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f)))
                                (library/ct-info-visit-visit-req* info)
                                (library/ct-info-visit-req* info)
                                (if (library-node-visible? visit-lib)
@@ -1388,19 +1399,20 @@
     (define build-program-body
       (lambda (program-entry node* visit-lib* invisible* rcinfo*)
         (add-recompile-info rcinfo*
-          (add-library/rt-records node*
-            (add-library/ct-records visit-lib*
-              (add-library/ct-records invisible*
+          (add-library/rt-records #f node*
+            (add-library/ct-records #f visit-lib*
+              (add-library/ct-records #f invisible*
                 (add-visit-lib-install* visit-lib*
                   (add-visit-lib-install* invisible*
                     `(revisit-only ,(build-combined-program-ir program-entry node*))))))))))
 
     (define build-library-body
       (lambda (node* visit-lib* rcinfo*)
-        (let ([cluster* (build-cluster* node*)])
+        (let* ([cluster* (build-cluster* node*)]
+               [collected-req-ht (build-collected-req-ht cluster*)])
           (add-recompile-info rcinfo*
-            (add-library/rt-cluster-records cluster*
-              (add-library/ct-records visit-lib*
+            (add-library/rt-records collected-req-ht node*
+              (add-library/ct-records collected-req-ht visit-lib*
                 (add-visit-lib-install* visit-lib*
                   `(revisit-only ,(build-combined-library-ir cluster*))))))))))
 

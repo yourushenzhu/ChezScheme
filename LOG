@@ -1158,3 +1158,8 @@
   requirements are explicitly invoked in the code, the library-rt/info
   records are left alone.
     compile.ss
+- fixed but with compile-whole-library introduced by the previous fix,
+  which lead to the creation of collected libraries where the import
+  requirements for libraries collected together into a cluster were not
+  updated to reflect the updated invoke requirements.
+    compile.ss
