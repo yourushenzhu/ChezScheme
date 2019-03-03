@@ -2468,6 +2468,7 @@
                 ($oops #f "attempt to visit library ~s while it is still being loaded" (libdesc-path desc)))
               (when (eq? p 'pending)
                 ($oops #f "cyclic dependency involving visit of library ~s" (libdesc-path desc)))
+              (when (getenv "DEBUG") (printf "starting visit of ~s (~s)~%" (libdesc-path desc) uid))
               (libdesc-visit-code-set! desc 'pending)
               (on-reset
                 (begin
@@ -2475,9 +2476,11 @@
                   (libdesc-visit-code-set! desc p))
                 (for-each (lambda (req) (visit-library (libreq-uid req))) (libdesc-visit-visit-req* desc))
                 (for-each (lambda (req) (invoke-library (libreq-uid req))) (libdesc-visit-req* desc))
+                (when (getenv "DEBUG") (printf "visiting ~s (~s)~%" (libdesc-path desc) uid))
                 (p))
               (libdesc-visit-code-set! desc #f)
-              (libdesc-visit-id*-set! desc '()))]))]
+              (libdesc-visit-id*-set! desc '()))]
+           [else (when (getenv "DEBUG") (printf "skipping already visited ~s (~s)~%" (libdesc-path desc) uid))]))]
       [else ($oops #f "library ~:s is not defined" uid)])))
 
 (define invoke-library
@@ -2493,11 +2496,14 @@
                 ($oops #f "attempt to invoke library ~s while it is still being loaded" (libdesc-path desc)))
               (when (eq? p 'pending)
                 ($oops #f "cyclic dependency involving invocation of library ~s" (libdesc-path desc)))
+              (when (getenv "DEBUG") (printf "starting invoke of ~s (~s)~%" (libdesc-path desc) uid))
               (libdesc-invoke-code-set! desc 'pending)
               (on-reset (libdesc-invoke-code-set! desc p)
                 (for-each (lambda (req) (invoke-library (libreq-uid req))) (libdesc-invoke-req* desc))
+                (when (getenv "DEBUG") (printf "invoking ~s (~s)~%" (libdesc-path desc) uid))
                 (p))
-              (libdesc-invoke-code-set! desc #f))]))]
+              (libdesc-invoke-code-set! desc #f))]
+           [else (when (getenv "DEBUG") (printf "skipping already invoked ~s (~s)~%" (libdesc-path desc) uid))]))]
       [else ($oops #f "library ~:s is not defined" uid)])))
 
 (define-threaded require-invoke
@@ -5161,12 +5167,15 @@
                 (lambda (p)
                    (when (eq? p 'loading)
                      ($oops #f "attempt to import library ~s while it is still being loaded" (libdesc-path desc)))
-                  (libdesc-import-code-set! desc #f)
-                  (on-reset (libdesc-import-code-set! desc p)
-                    (for-each (lambda (req) (import-library (libreq-uid req))) (libdesc-import-req* desc))
-                    ($install-library-clo-info (libdesc-clo* desc))
-                    (libdesc-clo*-set! desc '())
-                    (p)))]))]
+                   (when (getenv "DEBUG") (printf "starting import of ~s (~s)~%" (libdesc-path desc) uid))
+                   (libdesc-import-code-set! desc #f)
+                   (on-reset (libdesc-import-code-set! desc p)
+                     (for-each (lambda (req) (import-library (libreq-uid req))) (libdesc-import-req* desc))
+                     ($install-library-clo-info (libdesc-clo* desc))
+                     (libdesc-clo*-set! desc '())
+                     (when (getenv "DEBUG") (printf "importing ~s (~s)~%" (libdesc-path desc) uid))
+                     (p)))]
+               [else (when (getenv "DEBUG") (printf "skipping already imported ~s (~s)~%" (libdesc-path desc) uid))]))]
           [else ($oops #f "library ~:s is not defined" uid)])))
   
     ; invoking or visiting a possibly unloaded library occurs in two separate steps:
@@ -5478,7 +5487,9 @@
   (lambda (uid)
     (cond
       [(get-library-descriptor uid) =>
-       (lambda (desc) (libdesc-invoke-code-set! desc #f))]
+       (lambda (desc)
+         (when (getenv "DEBUG") (printf "printf marking ~s (~s) invoked~%" (libdesc-path desc) uid))
+         (libdesc-invoke-code-set! desc #f))]
       [else ($oops #f "library ~:s is not defined" uid)])))
 
 

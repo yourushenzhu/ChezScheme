@@ -1163,3 +1163,13 @@
   requirements for libraries collected together into a cluster were not
   updated to reflect the updated invoke requirements.
     compile.ss
+- more fixes for compile-whole-library.  first, when a library is
+  encountered for a second time, it raises an error instead of being
+  ignored.  second, when a combined library is broken up into multiple
+  clusters, an explicit requirement is added between a cluster and the
+  cluster that proceeds it.  this forces any invoke requirements in the
+  previous cluster to be satisfied before the code of the previous
+  cluster is run, which might otherwise be missed if these clusters are
+  independent of eachother. NB: this commit still contains some
+  debugging code that should be cleaned-up.
+    compile.ss
