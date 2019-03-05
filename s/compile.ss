@@ -1303,59 +1303,22 @@
           body
           rcinfo*)))
 
-    (define (compute-collected-req* previous-node* node*)
-      (let ([ht (make-hashtable symbol-hash eq?)])
-        ;; remove the constituents of the cluster, since they will be invoked
-        ;; as part of the collected code, and have already been appropriately
-        ;; sorted.
-        (for-each (lambda (node) (symbol-hashtable-set! ht (library-node-uid node) #t)) node*)
-        (let ([collected-req* (fold-right
-                                (lambda (node collected-req*)
-                                  (fold-right
-                                    (lambda (req collected-req*)
-                                      (let ([cell (symbol-hashtable-cell ht (libreq-uid req) #f)])
-                                        (if (cdr cell)
-                                            collected-req*
-                                            (begin
-                                              (set-cdr! cell #t)
-                                              (cons req collected-req*)))))
-                                    collected-req* (library-node-invoke-req* node)))
-                                '() node*)])
-          (if (or (null? previous-node*) 
-                  (ormap (lambda (node) (symbol-hashtable-contains? ht (library-node-uid node))) previous-node*))
-              collected-req*
-              (let ([node (car previous-node*)])
-                (cons
-                  (make-libreq
-                    (library-node-path node)
-                    (library-node-version node)
-                    (library-node-uid node))
-                  collected-req*))))))
-
     (define requirements-join
       (lambda (import-req* maybe-collected-invoke-req*)
+        (define (->libreq node)
+          (make-libreq
+           (library-node-path node)
+           (library-node-version node)
+           (library-node-uid node)))
         (if maybe-collected-invoke-req*
             (let f ([invoke-req* maybe-collected-invoke-req*])
               (if (null? invoke-req*)
                   import-req*
-                  (let* ([req (car invoke-req*)] [uid (libreq-uid req)])
+                  (let* ([req (car invoke-req*)] [uid (library-node-uid req)])
                     (if (memp (lambda (import-req) (eq? (libreq-uid import-req) uid)) import-req*)
                         (f (cdr invoke-req*))
-                        (cons req (f (cdr invoke-req*)))))))
+                        (cons (->libreq req) (f (cdr invoke-req*)))))))
             import-req*)))
-
-    (define build-collected-req-ht
-      (lambda (cluster*)
-        (let ([ht (make-hashtable symbol-hash eq?)])
-          (fold-left (lambda (previous-cluster cluster)
-                       (let ([collected-req* (compute-collected-req* previous-cluster cluster)])
-                         (for-each
-                           (lambda (node)
-                             (symbol-hashtable-set! ht (library-node-uid node) collected-req*))
-                           cluster)
-                         cluster))
-            '() cluster*)
-          ht)))
 
     (define add-library/rt-records
       (lambda (maybe-ht node* body)
@@ -1409,22 +1372,29 @@
             body visit-lib*)))
 
     (define build-cluster*
-      (lambda (node*)
-        (define (s-entry/binary node* rcluster*)
+      (lambda (node* ht)
+        (define (add-deps! node deps)
+          (symbol-hashtable-set! ht (library-node-uid node) deps))
+        (define (s-entry/binary node* rcluster* deps)
           (if (null? node*)
               (reverse rcluster*)
               (let ([node (car node*)])
                 (if (library-node-binary? node)
-                    (s-entry/binary (cdr node*) rcluster*)
-                    (s-source (cdr node*) (list node) rcluster*)))))
-        (define (s-source node* rnode* rcluster*)
+                    (s-entry/binary (cdr node*) rcluster* (cons node deps))
+                    (begin
+                      (add-deps! node deps)
+                      (s-source (cdr node*) (list node) rcluster* (list node)))))))
+        (define (s-source node* rnode* rcluster* deps)
           (if (null? node*)
               (reverse (cons (reverse rnode*) rcluster*))
               (let ([node (car node*)])
                 (if (library-node-binary? node)
-                    (s-entry/binary (cdr node*) (cons (reverse rnode*) rcluster*))
-                    (s-source (cdr node*) (cons node rnode*) rcluster*)))))
-        (s-entry/binary node* '())))
+                    (s-entry/binary (cdr node*) (cons (reverse rnode*) rcluster*)
+                      (cons node deps))
+                    (begin
+                      (add-deps! node deps)
+                      (s-source (cdr node*) (cons node rnode*) rcluster* deps))))))
+        (s-entry/binary node* '() '())))
 
     (define print-dot
       (case-lambda
@@ -1619,8 +1589,8 @@
 
     (define build-library-body
       (lambda (who ofn node* visit-lib* rcinfo*)
-        (let* ([cluster* (build-cluster* node*)]
-               [collected-req-ht (build-collected-req-ht cluster*)])
+        (let* ([collected-req-ht (make-hashtable symbol-hash eq?)]
+               [cluster* (build-cluster* node* collected-req-ht)])
           (when (getenv "DOT") (with-output-to-file (format "~a-output.dot" (path-root ofn)) (lambda () (print-dot who (filter library-node-binary? node*) cluster* #f collected-req-ht)) 'replace))
           (add-recompile-info rcinfo*
             (add-library/rt-records collected-req-ht node*
