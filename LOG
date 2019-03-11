@@ -1182,3 +1182,7 @@
   independent of eachother. NB: this commit still contains some
   debugging code that should be cleaned-up.
     compile.ss
+- clean-up debugging related to compile-whole-library, add mats for some
+  of the failing examples. Remove library-search-path.
+    compile.ss, syntax.ss, primdat.ss,
+    7.ms

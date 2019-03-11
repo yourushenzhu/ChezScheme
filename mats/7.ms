@@ -3359,6 +3359,423 @@ evaluating module init
   (equal?
     (separate-eval '(let () (import (testfile-wpo-extlib-2)) (p)))
     "(9 . 5)\n")
+
+  ;; regression tests from @owaddell generated to fix problems he encountered
+  ;; with compile-whole-library from a test generator.
+  (begin
+    (with-output-to-file "testfile-wpo-coconut.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-coconut)
+             (export coconut apple->coconut)
+             (import (scheme))
+             (define $init (list '_))
+             (define apple->coconut (cons 'apple->coconut $init))
+             (define coconut (list 'coconut apple->coconut $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-banana.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-banana)
+             (export banana apple->banana)
+             (import (scheme))
+             (define $init (list '_))
+             (define apple->banana (cons 'apple->banana $init))
+             (define banana (list 'banana apple->banana $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-apple.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-apple)
+             (export apple)
+             (import (scheme) (testfile-wpo-banana) (testfile-wpo-coconut))
+             (define $init
+               (list
+                 '_
+                 (cons 'apple->banana apple->banana)
+                 (cons 'apple->coconut apple->coconut)))
+             (define apple (list 'apple $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-main.ss"
+      (lambda ()
+        (pretty-print '(import (scheme) (testfile-wpo-banana) (testfile-wpo-coconut) (testfile-wpo-apple)))
+        (pretty-print '(pretty-print banana))
+        (pretty-print '(pretty-print coconut))
+        (pretty-print '(pretty-print apple)))
+      'replace)
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([compile-imported-libraries #t]
+                        [generate-wpo-files #t])
+           (compile-program x)))
+      'wpo-main)
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-coconut)
+    "()\n")
+
+  (begin
+    (delete-file "testfile-wpo-coconut.wpo")
+    #t)
+  
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-apple)
+    "((testfile-wpo-coconut))\n")
+
+  (begin
+    (delete-file "testfile-wpo-banana.wpo")
+    (delete-file "testfile-wpo-apple.wpo")
+    (delete-file "testfile-wpo-banana.so")
+    (if (windows?)
+        (system "mklink testfile-wpo-apple.so testfile-wpo-banana.so")
+        (system "ln -s testfile-wpo-apple.so testfile-wpo-banana.so"))
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+      'wpo-main)
+    "((testfile-wpo-apple)\n  (testfile-wpo-banana)\n  (testfile-wpo-coconut))\n")
+
+  (equal?
+    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (string-append
+      "(banana (apple->banana _) (_))\n"
+      "(coconut (apple->coconut _) (_))\n"
+      "(apple\n  (_ (apple->banana apple->banana _)\n     (apple->coconut apple->coconut _)))\n"))
+
+  (begin
+    ;; clean-up to make sure previous builds don't get in the way.
+    (delete-file "testfile-wpo-coconut.ss")
+    (delete-file "testfile-wpo-coconut.so")
+    (delete-file "testfile-wpo-coconut.wpo")
+
+    (delete-file "testfile-wpo-banana.ss")
+    (delete-file "testfile-wpo-banana.so")
+    (delete-file "testfile-wpo-banana.wpo")
+
+    (delete-file "testfile-wpo-apple.ss")
+    (delete-file "testfile-wpo-apple.so")
+    (delete-file "testfile-wpo-apple.wpo")
+
+    (delete-file "testfile-wpo-main.ss")
+    (delete-file "testfile-wpo-main.so")
+    (delete-file "testfile-wpo-main.wpo")
+
+    #t)
+
+  (begin
+    (with-output-to-file "testfile-wpo-coconut.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-coconut)
+             (export coconut banana->coconut apple->coconut)
+             (import (scheme))
+             (define $init (list '_))
+             (define banana->coconut (cons 'banana->coconut $init))
+             (define apple->coconut (cons 'apple->coconut $init))
+             (define coconut
+               (list 'coconut banana->coconut apple->coconut $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-date.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-date)
+             (export date apple->date)
+             (import (scheme))
+             (define $init (list '_))
+             (define apple->date (cons 'apple->date $init))
+             (define date (list 'date apple->date $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-apple.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-apple)
+             (export apple)
+             (import (scheme) (testfile-wpo-date) (testfile-wpo-coconut))
+             (define $init
+               (list
+                 '_
+                 (cons 'apple->date apple->date)
+                 (cons 'apple->coconut apple->coconut)))
+             (define apple (list 'apple $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-banana.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-banana)
+             (export banana)
+             (import (scheme) (testfile-wpo-coconut))
+             (define $init
+               (list '_ (cons 'banana->coconut banana->coconut)))
+             (define banana (list 'banana $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-main.ss"
+      (lambda ()
+        (pretty-print '(import (scheme) (testfile-wpo-date)
+                         (testfile-wpo-banana) (testfile-wpo-coconut)
+                         (testfile-wpo-apple)))
+        (pretty-print '(pretty-print date))
+        (pretty-print '(pretty-print banana))
+        (pretty-print '(pretty-print coconut))
+        (pretty-print '(pretty-print apple)))
+      'replace)
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([compile-imported-libraries #t]
+                        [generate-wpo-files #t])
+           (compile-program x)))
+      'wpo-main)
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-coconut)
+    "()\n")
+
+  (begin
+    (delete-file "testfile-wpo-coconut.wpo")
+    #t)
+  
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-apple)
+    "((testfile-wpo-coconut))\n")
+
+  (begin
+    (delete-file "testfile-wpo-date.wpo")
+    (delete-file "testfile-wpo-apple.wpo")
+    (delete-file "testfile-wpo-date.so")
+    (if (windows?)
+        (system "mklink testfile-wpo-apple.so testfile-wpo-date.so")
+        (system "ln -s testfile-wpo-apple.so testfile-wpo-date.so"))
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+      'wpo-main)
+    "((testfile-wpo-apple)\n  (testfile-wpo-date)\n  (testfile-wpo-coconut))\n")
+
+  (equal?
+    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (string-append
+      "(date (apple->date _) (_))\n"
+      "(banana (_ (banana->coconut banana->coconut _)))\n"
+      "(coconut (banana->coconut _) (apple->coconut _) (_))\n"
+      "(apple\n"
+      "  (_ (apple->date apple->date _)\n"
+      "     (apple->coconut apple->coconut _)))\n"))
+
+  (begin
+    ;; clean-up to make sure previous builds don't get in the way.
+    (delete-file "testfile-wpo-coconut.ss")
+    (delete-file "testfile-wpo-coconut.so")
+    (delete-file "testfile-wpo-coconut.wpo")
+
+    (delete-file "testfile-wpo-date.ss")
+    (delete-file "testfile-wpo-date.so")
+    (delete-file "testfile-wpo-date.wpo")
+
+    (delete-file "testfile-wpo-banana.ss")
+    (delete-file "testfile-wpo-banana.so")
+    (delete-file "testfile-wpo-banana.wpo")
+
+    (delete-file "testfile-wpo-apple.ss")
+    (delete-file "testfile-wpo-apple.so")
+    (delete-file "testfile-wpo-apple.wpo")
+
+    (delete-file "testfile-wpo-main.ss")
+    (delete-file "testfile-wpo-main.so")
+    (delete-file "testfile-wpo-main.wpo")
+
+    #t)
+
+  (begin
+    (with-output-to-file "testfile-wpo-date.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-date)
+             (export date apple->date)
+             (import (scheme))
+             (define $init (list '_))
+             (define apple->date (cons 'apple->date $init))
+             (define date (list 'date apple->date $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-eel.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-eel)
+             (export eel coconut->eel apple->eel)
+             (import (scheme))
+             (define $init (list '_))
+             (define coconut->eel (cons 'coconut->eel $init))
+             (define apple->eel (cons 'apple->eel $init))
+             (define eel (list 'eel coconut->eel apple->eel $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-coconut.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-coconut)
+             (export coconut banana->coconut apple->coconut)
+             (import (scheme) (testfile-wpo-eel))
+             (define $init (list '_ (cons 'coconut->eel coconut->eel)))
+             (define banana->coconut (cons 'banana->coconut $init))
+             (define apple->coconut (cons 'apple->coconut $init))
+             (define coconut
+               (list 'coconut banana->coconut apple->coconut $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-apple.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-apple)
+             (export apple)
+             (import (scheme) (testfile-wpo-date) (testfile-wpo-coconut)
+               (testfile-wpo-eel))
+             (define $init
+               (list
+                 '_
+                 (cons 'apple->date apple->date)
+                 (cons 'apple->coconut apple->coconut)
+                 (cons 'apple->eel apple->eel)))
+             (define apple (list 'apple $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-banana.ss"
+      (lambda ()
+        (pretty-print
+          '(library (testfile-wpo-banana)
+             (export banana)
+             (import (scheme) (testfile-wpo-coconut))
+             (define $init
+               (list '_ (cons 'banana->coconut banana->coconut)))
+             (define banana (list 'banana $init)))))
+      'replace)
+    (with-output-to-file "testfile-wpo-main.ss"
+      (lambda ()
+        (pretty-print '(import (scheme) (testfile-wpo-date)
+                         (testfile-wpo-banana) (testfile-wpo-coconut)
+                         (testfile-wpo-apple) (testfile-wpo-eel)))
+        (pretty-print '(pretty-print date))
+        (pretty-print '(pretty-print banana))
+        (pretty-print '(pretty-print coconut))
+        (pretty-print '(pretty-print apple))
+        (pretty-print '(pretty-print eel)))
+      'replace)
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([compile-imported-libraries #t]
+                        [generate-wpo-files #t])
+           (compile-program x)))
+      'wpo-main)
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-coconut)
+    "()\n")
+
+  (begin
+    (delete-file "testfile-wpo-eel.wpo")
+    (delete-file "testfile-wpo-coconut.wpo")
+    (delete-file "testfile-wpo-eel.so")
+    (if (windows?)
+        (system "mklink testfile-wpo-coconut.so testfile-wpo-eel.so")
+        (system "ln -s testfile-wpo-coconut.so testfile-wpo-eel.so"))
+    #t)
+  
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (parameterize ([generate-wpo-files #f])
+           (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
+      'wpo-apple)
+    "((testfile-wpo-coconut) (testfile-wpo-eel))\n")
+
+  (begin
+    (delete-file "testfile-wpo-date.wpo")
+    (delete-file "testfile-wpo-apple.wpo")
+    (delete-file "testfile-wpo-date.so")
+    (if (windows?)
+        (system "mklink testfile-wpo-apple.so testfile-wpo-date.so")
+        (system "ln -s testfile-wpo-apple.so testfile-wpo-date.so"))
+    #t)
+
+  (equal?
+    (separate-compile
+      '(lambda (x)
+         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+      'wpo-main)
+    "((testfile-wpo-apple)\n  (testfile-wpo-date)\n  (testfile-wpo-coconut)\n  (testfile-wpo-eel))\n")
+
+  (equal?
+    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (string-append
+      "(date (apple->date _) (_))\n"
+      "(banana\n"
+      "  (_ (banana->coconut\n"
+      "       banana->coconut\n"
+      "       _\n"
+      "       (coconut->eel coconut->eel _))))\n"
+      "(coconut\n"
+      "  (banana->coconut _ (coconut->eel coconut->eel _))\n"
+      "  (apple->coconut _ (coconut->eel coconut->eel _))\n"
+      "  (_ (coconut->eel coconut->eel _)))\n"
+      "(apple\n"
+      "  (_ (apple->date apple->date _)\n"
+      "     (apple->coconut\n"
+      "       apple->coconut\n"
+      "       _\n"
+      "       (coconut->eel coconut->eel _))\n"
+      "     (apple->eel apple->eel _)))\n"
+      "(eel (coconut->eel _) (apple->eel _) (_))\n"))
+
+  (begin
+    ;; clean-up to make sure previous builds don't get in the way.
+    (delete-file "testfile-wpo-coconut.ss")
+    (delete-file "testfile-wpo-coconut.so")
+    (delete-file "testfile-wpo-coconut.wpo")
+
+    (delete-file "testfile-wpo-eel.ss")
+    (delete-file "testfile-wpo-eel.so")
+    (delete-file "testfile-wpo-eel.wpo")
+
+    (delete-file "testfile-wpo-date.ss")
+    (delete-file "testfile-wpo-date.so")
+    (delete-file "testfile-wpo-date.wpo")
+
+    (delete-file "testfile-wpo-banana.ss")
+    (delete-file "testfile-wpo-banana.so")
+    (delete-file "testfile-wpo-banana.wpo")
+
+    (delete-file "testfile-wpo-apple.ss")
+    (delete-file "testfile-wpo-apple.so")
+    (delete-file "testfile-wpo-apple.wpo")
+
+    (delete-file "testfile-wpo-main.ss")
+    (delete-file "testfile-wpo-main.so")
+    (delete-file "testfile-wpo-main.wpo")
+
+    #t)
 )
 
 (mat maybe-compile-whole

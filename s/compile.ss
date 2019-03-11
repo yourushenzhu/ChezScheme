@@ -758,12 +758,12 @@
       (program-info-invoke-req* (program-node-pinfo node))))
 
   (define-record-type library-node (nongenerative) (parent node)
-    (fields binary? (mutable ctinfo) (mutable rtinfo) (mutable ctir) (mutable rtir) (mutable visible?))
+    (fields binary? (mutable ctinfo) (mutable rtinfo) (mutable ctir) (mutable rtir) (mutable visible?) fn)
     (protocol
       (lambda (pargs->new)
-        (lambda (binary? ctinfo rtinfo visible?)
+        (lambda (binary? ctinfo rtinfo visible? fn)
           (safe-assert (or ctinfo rtinfo))
-          ((pargs->new) binary? ctinfo rtinfo #f #f visible?)))))
+          ((pargs->new) binary? ctinfo rtinfo #f #f visible? fn)))))
   (define library-node-path
     (lambda (node)
       (library-info-path (or (library-node-ctinfo node) (library-node-rtinfo node)))))
@@ -951,10 +951,10 @@
                    [node (cdr cell)])
               (if node
                   (if (library-node-ctinfo node)
-                      ($oops who "encountered library ~s in ~a, but had already encountered it"
-                        (library-info-path linfo/ct) ifn)
+                      ($oops who "encountered library ~s in ~a, but had already encountered it in ~a"
+                        (library-info-path linfo/ct) ifn (library-node-fn node))
                       (begin (library-node-ctinfo-set! node linfo/ct) #f))
-                  (let ([node (make-library-node binary? linfo/ct #f (or libs-visible? binary?))])
+                  (let ([node (make-library-node binary? linfo/ct #f (or libs-visible? binary?) ifn)])
                     (set-cdr! cell node)
                     node)))))
         (define record-rt-lib!
@@ -965,10 +965,10 @@
                    [node (cdr cell)])
               (if node
                   (if (library-node-rtinfo node)
-                      ($oops who "encountered library ~s in ~a, but had already encountered it"
-                        (library-info-path linfo/rt) ifn)
+                      ($oops who "encountered library ~s in ~a, but had already encountered it in ~a"
+                        (library-info-path linfo/rt) ifn (library-node-fn node))
                       (begin (library-node-rtinfo-set! node linfo/rt) #f))
-                  (let ([node (make-library-node binary? #f linfo/rt (or libs-visible? binary?))])
+                  (let ([node (make-library-node binary? #f linfo/rt (or libs-visible? binary?) ifn)])
                     (set-cdr! cell node)
                     node)))))
         (define record-ct-lib-ir!
@@ -1396,187 +1396,6 @@
                       (s-source (cdr node*) (cons node rnode*) rcluster* deps))))))
         (s-entry/binary node* '() '())))
 
-    (define print-dot
-      (case-lambda
-        [(who lib* maybe-program-node)
-         (let ([ht (make-eq-hashtable)]
-               [n 0]
-               [lib* (sort
-                       (lambda (lib1 lib2)
-                         (let loop ([lib1 (library-node-path lib1)] [lib2 (library-node-path lib2)])
-                           (cond
-                             [(null? lib1) #t]
-                             [(null? lib2) #f]
-                             [(eq? (car lib1) (car lib2)) (loop (cdr lib1) (cdr lib2))]
-                             [(string<? (symbol->string (car lib1)) (symbol->string (car lib2)))]
-                             [else #f])))
-                       lib*)])
-           (define (next-name)
-             (let ([x (format "n~s" n)])
-               (set! n (fx+ n 1))
-               x))
-           (printf "~%digraph \"~s\" {~%" who)
-           (printf "  node [style=\"filled\"];~%")
-           (for-each
-             (lambda (lib)
-               (let ([n (next-name)])
-                 (eq-hashtable-set! ht (library-node-uid lib) n)
-                 (printf "  ~a [label=\"~s\", fillcolor=\"~a\"];~%"
-                         n (library-node-path lib)
-                         (if (library-node-binary? lib) "#CCCCCC" "#FFFFFF"))))
-             lib*)
-           (for-each
-             (lambda (lib)
-               (let ([n (eq-hashtable-ref ht (library-node-uid lib) #f)])
-                 (for-each
-                   (lambda (dep)
-                     (printf "  ~a -> ~a [color=\"black\"];~%" n (eq-hashtable-ref ht (library-node-uid dep) #f)))
-                   (node-depend* lib))
-                 (for-each
-                   (lambda (libreq)
-                     (unless ($system-library? (libreq-path libreq))
-                       (printf "  ~a -> ~a [color=\"blue\"];~%" n (eq-hashtable-ref ht (libreq-uid libreq) #f))))
-                   (library-node-import-req* lib))
-                 (for-each
-                   (lambda (libreq)
-                     (unless ($system-library? (libreq-path libreq))
-                       (printf "  ~a -> ~a [color=\"green\"];~%" n (eq-hashtable-ref ht (libreq-uid libreq) #f))))
-                   (library/ct-info-visit-req* (library-node-ctinfo lib)))))
-             lib*)
-           (when maybe-program-node
-             (let ([n (next-name)])
-               (printf "  ~a [label=\"program\"];~%" n)
-               (for-each
-                 (lambda (dep)
-                   (printf "  ~a -> ~a [color=\"black\"];~%" n (eq-hashtable-ref ht (library-node-uid dep) #f)))
-                 (node-depend* maybe-program-node))))
-           (printf "}~%"))]
-        [(who bin-lib* lib** maybe-program-node maybe-ht)
-         (let ([ht (make-eq-hashtable)] [n 0] [cluster_n 0])
-           (define (next-name)
-             (let ([x (format "n~s" n)])
-               (set! n (fx+ n 1))
-               x))
-           (define-syntax incr!
-             (syntax-rules ()
-               [(_ ?n) (let ([n ?n]) (set! ?n (+ n 1)) n)]))
-           (printf "~%digraph \"~s\" {~%" who)
-           (printf "  node [style=\"filled\"];~%")
-           (for-each
-             (lambda (lib)
-               (let ([n (next-name)])
-                 (eq-hashtable-set! ht (library-node-uid lib) n)))
-             bin-lib*)
-           (for-each
-             (lambda (lib*)
-               (for-each
-                 (lambda (lib)
-                   (let ([n (next-name)])
-                     (eq-hashtable-set! ht (library-node-uid lib) n)))
-                 lib*))
-             lib**)
-           (for-each
-             (lambda (lib)
-               (let* ([rtinfo (library-node-rtinfo lib)]
-                      [ctinfo (library-node-ctinfo lib)]
-                      [uid (library-info-uid rtinfo)]
-                      [n (eq-hashtable-ref ht (library-node-uid lib) #f)])
-                 (printf "  ~a [label=\"~s\", fillcolor=\"~a\"];~%"
-                   n (library-node-path lib)
-                   (if (library-node-binary? lib) "#CCCCCC" "#FFFFFF"))
-                 (for-each
-                   (lambda (req)
-                     (unless ($system-library? (libreq-path req))
-                       (printf "  ~a -> ~a [color=\"black\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f))))
-                   (requirements-join
-                     (library/rt-info-invoke-req* rtinfo)
-                     (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                 (for-each
-                   (lambda (req)
-                     (unless ($system-library? (libreq-path req))
-                       (printf "  ~a -> ~a [color=\"blue\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f))))
-                   (requirements-join
-                     (library/ct-info-import-req* ctinfo)
-                     (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                 (for-each
-                   (lambda (req)
-                     (unless ($system-library? (libreq-path req))
-                       (printf "  ~a -> ~a [color=\"green\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f))))
-                   (library/ct-info-visit-req* ctinfo))))
-             bin-lib*)
-           (for-each
-             (lambda (lib*)
-               (printf "  subgraph cluster_~s {~%" cluster_n)
-               (printf "    color=black;~%")
-               (printf "    label=\"Cluster ~s\";~%" (incr! cluster_n))
-               (for-each
-                 (lambda (lib)
-                   (let* ([rtinfo (library-node-rtinfo lib)]
-                          [ctinfo (library-node-ctinfo lib)]
-                          [uid (library-info-uid rtinfo)]
-                          [n (eq-hashtable-ref ht (library-node-uid lib) #f)])
-                     (printf "    ~a [label=\"~s\", fillcolor=\"~a\"];~%"
-                       n (library-node-path lib)
-                       (if (library-node-binary? lib) "#CCCCCC" "#FFFFFF"))
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (when (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "    ~a -> ~a [color=\"black\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (requirements-join
-                         (library/rt-info-invoke-req* rtinfo)
-                         (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (when (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "    ~a -> ~a [color=\"blue\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (requirements-join
-                         (library/ct-info-import-req* ctinfo)
-                         (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (when (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "    ~a -> ~a [color=\"green\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (library/ct-info-visit-req* ctinfo))))
-                 lib*)
-               (printf "  }~%"))
-             lib**)
-           (for-each
-             (lambda (lib*)
-               (for-each
-                 (lambda (lib)
-                   (let* ([rtinfo (library-node-rtinfo lib)]
-                          [ctinfo (library-node-ctinfo lib)]
-                          [uid (library-info-uid rtinfo)]
-                          [n (eq-hashtable-ref ht (library-node-uid lib) #f)])
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (unless (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "  ~a -> ~a [color=\"black\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (requirements-join
-                         (library/rt-info-invoke-req* rtinfo)
-                         (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (unless (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "  ~a -> ~a [color=\"blue\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (requirements-join
-                         (library/ct-info-import-req* ctinfo)
-                         (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f))))
-                     (for-each
-                       (lambda (req)
-                         (unless ($system-library? (libreq-path req))
-                           (unless (find (lambda (lib) (eq? (library-node-uid lib) (libreq-uid req))) lib*)
-                             (printf "  ~a -> ~a [color=\"green\"];~%" n (eq-hashtable-ref ht (libreq-uid req) #f)))))
-                       (library/ct-info-visit-req* ctinfo))))
-                 lib*))
-             lib**)
-           (printf "}~%"))]))
-
     (define build-program-body
       (lambda (program-entry node* visit-lib* invisible* rcinfo*)
         (add-recompile-info rcinfo*
@@ -1591,7 +1410,6 @@
       (lambda (who ofn node* visit-lib* rcinfo*)
         (let* ([collected-req-ht (make-hashtable symbol-hash eq?)]
                [cluster* (build-cluster* node* collected-req-ht)])
-          (when (getenv "DOT") (with-output-to-file (format "~a-output.dot" (path-root ofn)) (lambda () (print-dot who (filter library-node-binary? node*) cluster* #f collected-req-ht)) 'replace))
           (add-recompile-info rcinfo*
             (add-library/rt-records collected-req-ht node*
               (add-library/ct-records collected-req-ht visit-lib*
@@ -1660,7 +1478,6 @@
          (unless (string? ofn) ($oops who "~s is not a string" ofn))
          (let*-values ([(hash-bang-line ir*) (read-input-file who ifn)]
                        [(program-entry lib* invisible* rcinfo* no-wpo*) (build-graph who ir* ifn #t #f libs-visible?)])
-           (when (getenv "DOT") (with-output-to-file (format "~a-input.dot" (path-root ofn)) (lambda () (print-dot who (append lib* invisible*) program-entry)) 'replace))
            (safe-assert program-entry)
            (safe-assert (null? no-wpo*))
            (let ([node* (topological-sort program-entry lib*)])
@@ -1674,7 +1491,6 @@
       (unless (string? ofn) ($oops who "~s is not a string" ofn))
       (let*-values ([(hash-bang-line ir*) (read-input-file who ifn)]
                     [(no-program lib* invisible* rcinfo* wpo*) (build-graph who ir* ifn #f (generate-wpo-files) #t)])
-        (when (getenv "DOT") (with-output-to-file (format "~a-input.dot" (path-root ofn)) (lambda () (print-dot who (append lib* invisible*) #f)) 'replace))
         (safe-assert (not no-program))
         (safe-assert (null? invisible*))
         (safe-assert (or (not (generate-wpo-files)) (not (null? wpo*))))

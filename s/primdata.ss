@@ -973,7 +973,6 @@
   (library-object-filename [sig [(sub-list) -> (maybe-string)]] [flags])
   (library-list [sig [() -> (list)]] [flags])
   (library-requirements [sig [(sub-list) -> (list)] [(sub-list library-requirements-options) -> (list)]] [flags])
-  (library-search-handler [sig [() -> (procedure)] [(procedure) -> (void)]] [flags])
   (library-version [sig [(sub-list) -> (list)]] [flags])
   (optimize-level [sig [() -> (ufixnum)] [(sub-ufixnum) -> (void)]] [flags])
   (pretty-initial-indent [sig [() -> (ufixnum)] [(ufixnum) -> (void)]] [flags])
