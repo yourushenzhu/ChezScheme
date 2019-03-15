@@ -1304,7 +1304,7 @@
           rcinfo*)))
 
     (define requirements-join
-      (lambda (import-req* maybe-collected-invoke-req*)
+      (lambda (req* maybe-collected-invoke-req*)
         (define (->libreq node)
           (make-libreq
            (library-node-path node)
@@ -1313,30 +1313,31 @@
         (if maybe-collected-invoke-req*
             (let f ([invoke-req* maybe-collected-invoke-req*])
               (if (null? invoke-req*)
-                  import-req*
-                  (let* ([req (car invoke-req*)] [uid (library-node-uid req)])
-                    (if (memp (lambda (import-req) (eq? (libreq-uid import-req) uid)) import-req*)
+                  req*
+                  (let* ([invoke-req (car invoke-req*)] [uid (library-node-uid invoke-req)])
+                    (if (memp (lambda (req) (eq? (libreq-uid req) uid)) req*)
                         (f (cdr invoke-req*))
-                        (cons (->libreq req) (f (cdr invoke-req*)))))))
-            import-req*)))
+                        (cons (->libreq invoke-req) (f (cdr invoke-req*)))))))
+            req*)))
 
     (define add-library/rt-records
       (lambda (maybe-ht node* body)
-        (fold-left (lambda (body node)
-                     (if (library-node-binary? node)
-                         body
-                         (let* ([info (library-node-rtinfo node)]
-                                [uid (library-info-uid info)])
-                           `(group (revisit-only
-                                     ,(make-library/rt-info
-                                        (library-info-path info)
-                                        (library-info-version info)
-                                        uid
-                                        (requirements-join
-                                          (library/rt-info-invoke-req* info)
-                                          (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f)))))
-                              ,body))))
-          body node*)))
+        (fold-left
+         (lambda (body node)
+           (if (library-node-binary? node)
+               body
+               (let* ([info (library-node-rtinfo node)]
+                      [uid (library-info-uid info)])
+                 `(group (revisit-only
+                          ,(make-library/rt-info
+                            (library-info-path info)
+                            (library-info-version info)
+                            uid
+                            (requirements-join
+                             (library/rt-info-invoke-req* info)
+                             (and maybe-ht (symbol-hashtable-ref maybe-ht uid #f)))))
+                    ,body))))
+         body node*)))
 
     (define add-library/ct-records
       (lambda (maybe-ht visit-lib* body)
@@ -1407,7 +1408,7 @@
                     `(revisit-only ,(build-combined-program-ir program-entry node*))))))))))
 
     (define build-library-body
-      (lambda (who ofn node* visit-lib* rcinfo*)
+      (lambda (node* visit-lib* rcinfo*)
         (let* ([collected-req-ht (make-hashtable symbol-hash eq?)]
                [cluster* (build-cluster* node* collected-req-ht)])
           (add-recompile-info rcinfo*
@@ -1498,7 +1499,7 @@
         (let ([node* (topological-sort #f lib*)])
           (write-wpo-file who ofn wpo*)
           (finish-compile who "whole library" ifn ofn hash-bang-line
-            (build-library-body who ofn node* lib* rcinfo*))
+            (build-library-body node* lib* rcinfo*))
           (build-required-library-list node* lib*))))))
 
 (set! $c-make-code

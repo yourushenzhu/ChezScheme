@@ -1166,10 +1166,10 @@
   (A) comes before (B) in the topological sort, if they are combined
   into the same cluster, (B)'s invoke code will be run as part of
   invoking (A).  the solution is two part: first we extend the invoke
-  requirments of all of the libraries in the same cluster to include the
+  requirements of all of the libraries in the same cluster to include the
   dependencies from other members of the cluster.  when there are
   multiple clusters, a dependency is added from each cluster to the one
-  that proceeds it.  this causes all of the binary dependencies to be
+  that precedes it.  this causes all of the binary dependencies to be
   invoked, since at least one member of each cluster is explicitly
   invoked.  finally, we extended the import requirements to incorporate
   the additional invoke requirements, which required us to consider

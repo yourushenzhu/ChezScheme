@@ -3818,6 +3818,59 @@ evaluating module init
     (delete-file "testfile-wpo-main.wpo")
 
     #t)
+
+  (begin
+    (with-output-to-file "testfile-deja-vu-one.ss"
+      (lambda ()
+        (pretty-print
+         '(library (testfile-deja-vu-one)
+            (export a)
+            (import (scheme))
+            (define a 3))))
+      'replace)
+    (with-output-to-file "testfile-deja-vu-two.ss"
+      (lambda ()
+        (pretty-print
+         '(library (testfile-deja-vu-two)
+            (export b)
+            (import (scheme) (testfile-deja-vu-one))
+            (define b (list 'b a)))))
+      'replace)
+    (with-output-to-file "testfile-deja-vu-dup.ss"
+      (lambda ()
+        (pretty-print
+         '(library (testfile-deja-vu-dup)
+            (export d)
+            (import (scheme) (testfile-deja-vu-one))
+            (define d (list a 'd)))))
+      'replace)
+    (with-output-to-file "testfile-deja-vu-main.ss"
+      (lambda ()
+        (for-each pretty-print
+          '((import (scheme) (testfile-deja-vu-one) (testfile-deja-vu-two) (testfile-deja-vu-dup))
+            (pretty-print (list a b d)))))
+      'replace)
+    (separate-eval
+     '(parameterize ([generate-wpo-files #t])
+        (compile-library "testfile-deja-vu-one")
+        (compile-library "testfile-deja-vu-two")
+        (compile-library "testfile-deja-vu-dup")
+        (compile-program "testfile-deja-vu-main")
+        (compile-whole-library "testfile-deja-vu-one.wpo" "testfile-deja-vu-one.done")
+        (compile-whole-library "testfile-deja-vu-two.wpo" "testfile-deja-vu-two.done")
+        (compile-whole-library "testfile-deja-vu-dup.wpo" "testfile-deja-vu-dup.done")))
+    #t)
+
+  (error?
+   (separate-eval
+    '(compile-whole-program "testfile-deja-vu-main.wpo" "testfile-deja-vu-main.done")))
+
+  (begin
+    (do ([stem '("one" "two" "dup" "main") (cdr stem)]) ((null? stem))
+      (do ([ext '("ss" "so" "wpo" "done") (cdr ext)]) ((null? ext))
+        (delete-file (format "testfile-deja-vu-~a.~a" (car stem) (car ext)))))
+    #t)
+
 )
 
 (mat maybe-compile-whole
