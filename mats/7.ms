@@ -3435,20 +3435,32 @@ evaluating module init
     (delete-file "testfile-wpo-banana.wpo")
     (delete-file "testfile-wpo-apple.wpo")
     (delete-file "testfile-wpo-banana.so")
-    (if (windows?)
-        (system "mklink testfile-wpo-apple.so testfile-wpo-banana.so")
-        (system "ln -s testfile-wpo-apple.so testfile-wpo-banana.so"))
     #t)
 
   (equal?
     (separate-compile
       '(lambda (x)
-         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+         (parameterize ([library-search-handler
+                         (let ([lsh (library-search-handler)])
+                           (lambda (who name dirs exts)
+                             (lsh who (if (equal? name '(testfile-wpo-banana))
+                                          '(testfile-wpo-apple)
+                                          name)
+                               dirs exts)))])
+           (compile-whole-program (format "~a.wpo" x) (format "~a.so" x))))
       'wpo-main)
     "((testfile-wpo-apple)\n  (testfile-wpo-banana)\n  (testfile-wpo-coconut))\n")
 
   (equal?
-    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (separate-eval 
+      '(parameterize ([library-search-handler
+                        (let ([lsh (library-search-handler)])
+                          (lambda (who name dirs exts)
+                            (lsh who (if (equal? name '(testfile-wpo-banana))
+                                         '(testfile-wpo-apple)
+                                         name)
+                                 dirs exts)))])
+         (load-program "testfile-wpo-main.so")))
     (string-append
       "(banana (apple->banana _) (_))\n"
       "(coconut (apple->coconut _) (_))\n"
@@ -3562,20 +3574,32 @@ evaluating module init
     (delete-file "testfile-wpo-date.wpo")
     (delete-file "testfile-wpo-apple.wpo")
     (delete-file "testfile-wpo-date.so")
-    (if (windows?)
-        (system "mklink testfile-wpo-apple.so testfile-wpo-date.so")
-        (system "ln -s testfile-wpo-apple.so testfile-wpo-date.so"))
     #t)
 
   (equal?
     (separate-compile
       '(lambda (x)
-         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+         (parameterize ([library-search-handler
+                         (let ([lsh (library-search-handler)])
+                           (lambda (who name dirs exts)
+                             (lsh who (if (equal? name '(testfile-wpo-date))
+                                          '(testfile-wpo-apple)
+                                          name)
+                               dirs exts)))])
+           (compile-whole-program (format "~a.wpo" x) (format "~a.so" x))))
       'wpo-main)
     "((testfile-wpo-apple)\n  (testfile-wpo-date)\n  (testfile-wpo-coconut))\n")
 
   (equal?
-    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (separate-eval 
+      '(parameterize ([library-search-handler
+                       (let ([lsh (library-search-handler)])
+                         (lambda (who name dirs exts)
+                           (lsh who (if (equal? name '(testfile-wpo-date))
+                                        '(testfile-wpo-apple)
+                                        name)
+                             dirs exts)))])
+         (load-program "testfile-wpo-main.so")))
     (string-append
       "(date (apple->date _) (_))\n"
       "(banana (_ (banana->coconut banana->coconut _)))\n"
@@ -3698,15 +3722,19 @@ evaluating module init
     (delete-file "testfile-wpo-eel.wpo")
     (delete-file "testfile-wpo-coconut.wpo")
     (delete-file "testfile-wpo-eel.so")
-    (if (windows?)
-        (system "mklink testfile-wpo-coconut.so testfile-wpo-eel.so")
-        (system "ln -s testfile-wpo-coconut.so testfile-wpo-eel.so"))
     #t)
   
   (equal?
     (separate-compile
       '(lambda (x)
-         (parameterize ([generate-wpo-files #f])
+         (parameterize ([generate-wpo-files #f]
+                        [library-search-handler
+                         (let ([lsh (library-search-handler)])
+                           (lambda (who name dirs exts)
+                             (lsh who (if (equal? name '(testfile-wpo-eel))
+                                          '(testfile-wpo-coconut)
+                                          name)
+                               dirs exts)))])
            (compile-whole-library (format "~a.wpo" x) (format "~a.so" x))))
       'wpo-apple)
     "((testfile-wpo-coconut) (testfile-wpo-eel))\n")
@@ -3715,20 +3743,34 @@ evaluating module init
     (delete-file "testfile-wpo-date.wpo")
     (delete-file "testfile-wpo-apple.wpo")
     (delete-file "testfile-wpo-date.so")
-    (if (windows?)
-        (system "mklink testfile-wpo-apple.so testfile-wpo-date.so")
-        (system "ln -s testfile-wpo-apple.so testfile-wpo-date.so"))
     #t)
 
   (equal?
     (separate-compile
       '(lambda (x)
-         (compile-whole-program (format "~a.wpo" x) (format "~a.so" x)))
+         (parameterize ([library-search-handler
+                         (let ([lsh (library-search-handler)])
+                           (lambda (who name dirs exts)
+                             (lsh who (cond
+                                        [(equal? name '(testfile-wpo-date)) '(testfile-wpo-apple)]
+                                        [(equal? name '(testfile-wpo-eel)) '(testfile-wpo-coconut)]
+                                        [else name])
+                               dirs exts)))])
+           (compile-whole-program (format "~a.wpo" x) (format "~a.so" x))))
       'wpo-main)
     "((testfile-wpo-apple)\n  (testfile-wpo-date)\n  (testfile-wpo-coconut)\n  (testfile-wpo-eel))\n")
 
   (equal?
-    (separate-eval '(load-program "testfile-wpo-main.so"))
+    (separate-eval 
+      '(parameterize ([library-search-handler
+                       (let ([lsh (library-search-handler)])
+                         (lambda (who name dirs exts)
+                           (lsh who (cond
+                                      [(equal? name '(testfile-wpo-date)) '(testfile-wpo-apple)]
+                                      [(equal? name '(testfile-wpo-eel)) '(testfile-wpo-coconut)]
+                                      [else name])
+                             dirs exts)))])
+         (load-program "testfile-wpo-main.so")))
     (string-append
       "(date (apple->date _) (_))\n"
       "(banana\n"

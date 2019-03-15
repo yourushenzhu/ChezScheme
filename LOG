@@ -1152,44 +1152,27 @@
     syntax.ss, primdata.ss,
     8.ms,
     libraries.stex
-=======
-- added tentative fix for whole program/library compilation bug reported
-  by @owaddell in issue 386.  the fix modifies invoke requirements in
-  the libraries included in the whole program/library compilation so
-  that external invoke requirements are handled for libraries that
-  come earlier in the combined invoke code.
-    compile.ss
-- included @owaddell's test case and modification to allow a user specified
-  library search in order to use the test code provided.
-    syntax.ss,
-    DELETE_ME/* (new)
-- incorporate @owaddell's fix to avoid duplicating node*.
-    compile.ss
-- improved fix for whole program/library compilation.  in
-  compile-whole-program, where libraries are clustered and invoke
-  requirements exist only in the library-rt/info records, the invoke
-  requirements for all libraries in a cluster are collected and the
-  library/rt-info record for each library has the collected set of
-  invoke requirements.  In compile-whole-program, where binary invoke
-  requirements are explicitly invoked in the code, the library-rt/info
-  records are left alone.
-    compile.ss
-- fixed but with compile-whole-library introduced by the previous fix,
-  which lead to the creation of collected libraries where the import
-  requirements for libraries collected together into a cluster were not
-  updated to reflect the updated invoke requirements.
-    compile.ss
-- more fixes for compile-whole-library.  first, when a library is
-  encountered for a second time, it raises an error instead of being
-  ignored.  second, when a combined library is broken up into multiple
-  clusters, an explicit requirement is added between a cluster and the
-  cluster that proceeds it.  this forces any invoke requirements in the
-  previous cluster to be satisfied before the code of the previous
-  cluster is run, which might otherwise be missed if these clusters are
-  independent of eachother. NB: this commit still contains some
-  debugging code that should be cleaned-up.
-    compile.ss
-- clean-up debugging related to compile-whole-library, add mats for some
-  of the failing examples. Remove library-search-path.
-    compile.ss, syntax.ss, primdat.ss,
+- added fix for whole program/library compilation bug with help from
+  @owaddell who originally reported the problem in issue 386.  this bug
+  arises from the way the parts of the combined library, and their
+  binary dependencies, are invoked when one of the constituent libraries
+  is invoked.  consider, for example, a combined library that contains
+  (A) and (B), where (B) depends on a binary library (C).  depending on
+  the sort order of (A) and (B), which may be unconstrained in the
+  partial ordering established by library dependencies, invoking (A) may
+  result in the invoke code for (B) being run first, without (B) ever
+  being explicitly invoked.  this can result in bindings required from
+  (C) by the invoke code in (B) to be unbound.  even in the case where
+  (A) comes before (B) in the topological sort, if they are combined
+  into the same cluster, (B)'s invoke code will be run as part of
+  invoking (A).  the solution is two part: first we extend the invoke
+  requirments of all of the libraries in the same cluster to include the
+  dependencies from other members of the cluster.  when there are
+  multiple clusters, a dependency is added from each cluster to the one
+  that proceeds it.  this causes all of the binary dependencies to be
+  invoked, since at least one member of each cluster is explicitly
+  invoked.  finally, we extended the import requirements to incorporate
+  the additional invoke requirements, which required us to consider
+  import requirements when building the dependency graph.
+    compile.ss,
     7.ms
