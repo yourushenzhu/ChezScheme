@@ -121,6 +121,8 @@ ptr S_create_thread_object(who, p_tc) const char *who; ptr p_tc; {
 
   GUARDIANENTRIES(tc) = Snil;
 
+  LZ4OUTBUFFER(tc) = NULL;
+
   tc_mutex_release()
 
   return thread;
@@ -224,7 +226,9 @@ static IBOOL destroy_thread(tc) ptr tc; {
         }
       }
 
-      free((void *)THREADTC(thread));
+      if (LZ4OUTBUFFER(tc) != NULL) free(LZ4OUTBUFFER(tc));
+
+      free((void *)tc);
       THREADTC(thread) = 0; /* mark it dead */
       status = 1;
       break;
@@ -429,6 +433,10 @@ IBOOL S_condition_wait(c, m, t) s_thread_cond_t *c; scheme_mutex_t *m; ptr t; {
     typeno = Sinteger32_value(Srecord_ref(t,0));
     sec = Sinteger32_value(Scar(Srecord_ref(t,1)));
     nsec = Sinteger32_value(Scdr(Srecord_ref(t,1)));
+  } else {
+    typeno = 0;
+    sec = 0;
+    nsec = 0;
   }
 
   if (c == &S_collect_cond || DISABLECOUNT(tc) == 0) {

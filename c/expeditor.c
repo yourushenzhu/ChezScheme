@@ -527,7 +527,10 @@ static void s_ee_write_char(wchar_t c) {
 }
 
 #else /* WIN32 */
-#ifdef SOLARIS
+#include <limits.h>
+#ifdef DISABLE_CURSES
+#include "nocurses.h"
+#elif defined(SOLARIS)
 #define NCURSES_CONST
 #define CHTYPE int
 #include </usr/include/curses.h>
@@ -546,12 +549,23 @@ static void s_ee_write_char(wchar_t c) {
 #include <sys/ioctl.h>
 #include <wchar.h>
 #include <locale.h>
-#ifndef __GLIBC__
+#if !defined(__GLIBC__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
 #include <xlocale.h>
 #endif
 
 #if defined(TIOCGWINSZ) && defined(SIGWINCH) && defined(EINTR)
 #define HANDLE_SIGWINCH
+#endif
+
+#ifdef USE_MBRTOWC_L
+static locale_t the_locale;
+static locale_t uselocale_alt(locale_t l) {
+  locale_t old = the_locale;
+  the_locale = l;
+  return old;
+}
+# define uselocale(v) uselocale_alt(v)
+# define mbrtowc(pwc, s, n, ps) mbrtowc_l(pwc, s, n, ps, the_locale)
 #endif
 
 /* locally defined functions */
@@ -677,11 +691,15 @@ static ptr s_ee_read_char(IBOOL blockp) {
 #endif /* PTHREADS */
 
     if (n == 1) {
-      old_locale = uselocale(term_locale);
-      sz = mbrtowc(&wch, buf, 1, &term_out_mbs);
-      uselocale(old_locale);
-      if (sz == 1) {
-        return Schar(wch);
+      if (buf[0] == '\0') {
+        return Schar('\0');
+      } else {
+        old_locale = uselocale(term_locale);
+        sz = mbrtowc(&wch, buf, 1, &term_out_mbs);
+        uselocale(old_locale);
+        if (sz == 1) {
+          return Schar(wch);
+        }
       }
     }
 

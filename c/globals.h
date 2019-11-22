@@ -63,7 +63,7 @@ EXTERN ptr S_foreign_dynamic;
 #endif
 
 /* globals that do need to be preserved in a saved heap */
-EXTERN struct {
+EXTERN struct S_G_struct {
   /* scheme.c */
     double thread_context[size_tc / sizeof(double)];
     ptr active_threads_id;
@@ -127,6 +127,7 @@ EXTERN struct {
     uptr countof_size[countof_types];
     ptr static_id;
     ptr countof_names;
+    IGEN prcgeneration;
 
   /* intern.c */
     iptr *oblist_length_pointer;

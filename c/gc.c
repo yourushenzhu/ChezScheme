@@ -1179,7 +1179,7 @@ void GCENTRY(ptr tc, IGEN mcg, IGEN tg) {
         si->next = chunk->unused_segs;
         chunk->unused_segs = si;
 #ifdef WIPECLEAN
-        memset((void *)build_ptr(seg,0), 0xc7, bytes_per_segment);
+        memset((void *)build_ptr(si->number,0), 0xc7, bytes_per_segment);
 #endif
         if ((chunk->nused_segs -= 1) == 0) {
           if (chunk->bytes != (minimum_segment_request + 1) * bytes_per_segment) {
@@ -1244,6 +1244,9 @@ void GCENTRY(ptr tc, IGEN mcg, IGEN tg) {
     }
 
     S_resize_oblist();
+
+    /* tell profile_release_counters to look for bwp'd counters at least through tg */
+    if (S_G.prcgeneration < tg) S_G.prcgeneration = tg;
 }
 
 #define sweep_space(s, body)\
@@ -1515,6 +1518,9 @@ static void sweep_thread(p) ptr p; {
     /* immediate SUPPRESSPRIMITIVEINLINING */
     relocate(&DEFAULTRECORDEQUALPROCEDURE(tc))
     relocate(&DEFAULTRECORDHASHPROCEDURE(tc))
+    relocate(&COMPRESSFORMAT(tc))
+    relocate(&COMPRESSLEVEL(tc))
+    /* void* LZ4OUTBUFFER(tc) */
     /* U64 INSTRCOUNTER(tc) */
     /* U64 ALLOCCOUNTER(tc) */
     relocate(&PARAMETERS(tc))
